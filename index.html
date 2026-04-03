@@ -124,6 +124,55 @@
       font-size: 13px;
     }
 
+    #cache-wrap { margin-top: 32px; }
+
+    .cache-card {
+      display: inline-flex;
+      align-items: center;
+      gap: 16px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 20px;
+    }
+
+    .cache-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .cache-type {
+      font-size: 15px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #7c6dfa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .cache-date {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .btn-cache {
+      background: none;
+      border: 1.5px solid var(--accent);
+      color: var(--accent2);
+      padding: 7px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .15s;
+      white-space: nowrap;
+    }
+
+    .btn-cache:hover { background: rgba(124,109,250,.12); }
+
     /* ── QUIZ SCREEN ── */
     #screen-quiz {
       padding: 32px 24px;
@@ -569,6 +618,7 @@
   <div class="axes-preview" id="axes-preview"></div>
   <button class="btn-primary" onclick="startQuiz()">診断をはじめる</button>
   <p class="meta">所要時間：約3分 ／ 全15問</p>
+  <div id="cache-wrap"></div>
 </div>
 
 <!-- ===== QUIZ SCREEN ===== -->
@@ -933,6 +983,9 @@ function init() {
     chip.style.borderColor = AXIS_COLORS[axis];
     wrap.appendChild(chip);
   });
+
+  // Render cached result button if exists
+  renderCacheButton();
 }
 
 // ===========================
@@ -1088,6 +1141,17 @@ function computeResults() {
     return normalized[c.axes[0]] > c.threshold && normalized[c.axes[1]] > c.threshold;
   });
 
+  // Save to cache
+  const cache = {
+    savedAt: new Date().toISOString(),
+    normalized,
+    primaryAxis,
+    secondaryAxis,
+    contradictions,
+  };
+  localStorage.setItem('vd_result', JSON.stringify(cache));
+  renderCacheButton();
+
   // Render
   setTimeout(() => renderResults(normalized, sorted, typeInfo, typeData, contradictions), 300);
 }
@@ -1127,9 +1191,9 @@ function renderResults(normalized, sorted, typeInfo, typeData, contradictions) {
     </div>
   `).join('');
 
-  // Envs
+  // Envs (top 2 only)
   const matchColor = { high: '#34d399', mid: '#fbbf24' };
-  const envsHtml = typeData.envs.map(e => `
+  const envsHtml = typeData.envs.slice(0, 2).map(e => `
     <div class="env-item">
       <div class="env-dot" style="background:${matchColor[e.match]}"></div>
       <span>${e.text}</span>
@@ -1237,6 +1301,42 @@ function renderResults(normalized, sorted, typeInfo, typeData, contradictions) {
       }
     });
   }, 200);
+}
+
+// ===========================
+// CACHE
+// ===========================
+function renderCacheButton() {
+  const raw = localStorage.getItem('vd_result');
+  const wrap = document.getElementById('cache-wrap');
+  if (!raw || !wrap) return;
+
+  const cache = JSON.parse(raw);
+  const typeData = TYPES[cache.primaryAxis];
+  const typeInfo = typeData.secondary[cache.secondaryAxis] || typeData.default;
+  const d = new Date(cache.savedAt);
+  const dateStr = `${d.getMonth()+1}/${d.getDate()}`;
+
+  wrap.innerHTML = `
+    <div class="cache-card">
+      <div class="cache-label">前回の診断結果</div>
+      <div class="cache-type">${typeInfo.name}</div>
+      <div class="cache-date">${dateStr}</div>
+      <button class="btn-cache" onclick="showCachedResult()">結果を見る →</button>
+    </div>
+  `;
+}
+
+function showCachedResult() {
+  const raw = localStorage.getItem('vd_result');
+  if (!raw) return;
+  const cache = JSON.parse(raw);
+  const { normalized, primaryAxis, secondaryAxis, contradictions } = cache;
+  const sorted = [...AXES].sort((a,b) => normalized[b] - normalized[a]);
+  const typeData = TYPES[primaryAxis];
+  const typeInfo = typeData.secondary[secondaryAxis] || typeData.default;
+  showScreen('result');
+  setTimeout(() => renderResults(normalized, sorted, typeInfo, typeData, contradictions), 100);
 }
 
 // ===========================
